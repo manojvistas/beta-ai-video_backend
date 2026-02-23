@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse, Response
 from loguru import logger
 from surreal_commands import execute_command_sync
 
+from api.auth import get_user_id
 from api.command_service import CommandService
 from api.models import (
     AssetModel,
@@ -159,6 +160,7 @@ async def get_sources(
         "updated", description="Field to sort by (created or updated)"
     ),
     sort_order: str = Query("desc", description="Sort order (asc or desc)"),
+    user_id: Optional[str] = Depends(get_user_id),
 ):
     """Get sources with pagination and sorting support."""
     try:
@@ -188,6 +190,7 @@ async def get_sources(
                 (SELECT VALUE count() FROM source_insight WHERE source = $parent.id GROUP ALL)[0].count OR 0 AS insights_count,
                 (SELECT VALUE id FROM source_embedding WHERE source = $parent.id LIMIT 1) != [] AS embedded
                 FROM (select value in from reference where out=$notebook_id)
+                WHERE user_id = $user_id
                 {order_clause}
                 LIMIT $limit START $offset
                 FETCH command
@@ -198,20 +201,34 @@ async def get_sources(
                     "notebook_id": ensure_record_id(notebook_id),
                     "limit": limit,
                     "offset": offset,
+                    "user_id": user_id,
                 },
             )
         else:
             # Query all sources - include command field with FETCH
-            query = f"""
-                SELECT id, asset, created, title, updated, topics, command,
-                (SELECT VALUE count() FROM source_insight WHERE source = $parent.id GROUP ALL)[0].count OR 0 AS insights_count,
-                (SELECT VALUE id FROM source_embedding WHERE source = $parent.id LIMIT 1) != [] AS embedded
-                FROM source
-                {order_clause}
-                LIMIT $limit START $offset
-                FETCH command
-            """
-            result = await repo_query(query, {"limit": limit, "offset": offset})
+            if user_id:
+                query = f"""
+                    SELECT id, asset, created, title, updated, topics, command,
+                    (SELECT VALUE count() FROM source_insight WHERE source = $parent.id GROUP ALL)[0].count OR 0 AS insights_count,
+                    (SELECT VALUE id FROM source_embedding WHERE source = $parent.id LIMIT 1) != [] AS embedded
+                    FROM source
+                    WHERE user_id = $user_id
+                    {order_clause}
+                    LIMIT $limit START $offset
+                    FETCH command
+                """
+                result = await repo_query(query, {"limit": limit, "offset": offset, "user_id": user_id})
+            else:
+                query = f"""
+                    SELECT id, asset, created, title, updated, topics, command,
+                    (SELECT VALUE count() FROM source_insight WHERE source = $parent.id GROUP ALL)[0].count OR 0 AS insights_count,
+                    (SELECT VALUE id FROM source_embedding WHERE source = $parent.id LIMIT 1) != [] AS embedded
+                    FROM source
+                    {order_clause}
+                    LIMIT $limit START $offset
+                    FETCH command
+                """
+                result = await repo_query(query, {"limit": limit, "offset": offset})
 
         # Convert result to response model
         # Command data is already fetched via FETCH command clause
@@ -281,6 +298,7 @@ async def create_source(
     form_data: tuple[SourceCreate, Optional[UploadFile]] = Depends(
         parse_source_form_data
     ),
+    user_id: Optional[str] = Depends(get_user_id),
 ):
     """Create a new source with support for both JSON and multipart form data."""
     source_data, upload_file = form_data
@@ -354,6 +372,7 @@ async def create_source(
             source = Source(
                 title=source_data.title or "Processing...",
                 topics=[],
+                user_id=user_id,
             )
             await source.save()
 
@@ -433,6 +452,7 @@ async def create_source(
                 source = Source(
                     title=source_data.title or "Processing...",
                     topics=[],
+                    user_id=user_id,
                 )
                 await source.save()
 
@@ -549,11 +569,14 @@ async def create_source(
 
 
 @router.post("/sources/json", response_model=SourceResponse)
-async def create_source_json(source_data: SourceCreate):
+async def create_source_json(
+    source_data: SourceCreate,
+    user_id: Optional[str] = Depends(get_user_id),
+):
     """Create a new source using JSON payload (legacy endpoint for backward compatibility)."""
     # Convert to form data format and call main endpoint
     form_data = (source_data, None)
-    return await create_source(form_data)
+    return await create_source(form_data, user_id=user_id)
 
 
 async def _resolve_source_file(source_id: str) -> tuple[str, str]:
@@ -596,12 +619,17 @@ def _is_source_file_available(source: Source) -> Optional[bool]:
 
 
 @router.get("/sources/{source_id}", response_model=SourceResponse)
-async def get_source(source_id: str):
+async def get_source(
+    source_id: str,
+    user_id: Optional[str] = Depends(get_user_id),
+):
     """Get a specific source by ID."""
     try:
         source = await Source.get(source_id)
         if not source:
             raise HTTPException(status_code=404, detail="Source not found")
+        if user_id and source.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized to view this source")
 
         # Get status information if command exists
         status = None
@@ -748,12 +776,18 @@ async def get_source_status(source_id: str):
 
 
 @router.put("/sources/{source_id}", response_model=SourceResponse)
-async def update_source(source_id: str, source_update: SourceUpdate):
+async def update_source(
+    source_id: str,
+    source_update: SourceUpdate,
+    user_id: Optional[str] = Depends(get_user_id),
+):
     """Update a source."""
     try:
         source = await Source.get(source_id)
         if not source:
             raise HTTPException(status_code=404, detail="Source not found")
+        if user_id and source.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized to update this source")
 
         # Update only provided fields
         if source_update.title is not None:
@@ -790,13 +824,18 @@ async def update_source(source_id: str, source_update: SourceUpdate):
 
 
 @router.post("/sources/{source_id}/retry", response_model=SourceResponse)
-async def retry_source_processing(source_id: str):
+async def retry_source_processing(
+    source_id: str,
+    user_id: Optional[str] = Depends(get_user_id),
+):
     """Retry processing for a failed or stuck source."""
     try:
         # First, verify source exists
         source = await Source.get(source_id)
         if not source:
             raise HTTPException(status_code=404, detail="Source not found")
+        if user_id and source.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized to retry this source")
 
         # Check if source already has a running command
         if source.command:
@@ -915,12 +954,17 @@ async def retry_source_processing(source_id: str):
 
 
 @router.delete("/sources/{source_id}")
-async def delete_source(source_id: str):
+async def delete_source(
+    source_id: str,
+    user_id: Optional[str] = Depends(get_user_id),
+):
     """Delete a source."""
     try:
         source = await Source.get(source_id)
         if not source:
             raise HTTPException(status_code=404, detail="Source not found")
+        if user_id and source.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this source")
 
         await source.delete()
 

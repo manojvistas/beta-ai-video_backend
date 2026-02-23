@@ -15,9 +15,11 @@ from open_notebook.exceptions import DatabaseOperationError, InvalidInputError
 
 class Notebook(ObjectModel):
     table_name: ClassVar[str] = "notebook"
+    nullable_fields: ClassVar[set[str]] = {"user_id"}
     name: str
     description: str
     archived: Optional[bool] = False
+    user_id: Optional[str] = None
 
     @field_validator("name")
     @classmethod
@@ -256,8 +258,10 @@ class SourceEmbedding(ObjectModel):
 
 class SourceInsight(ObjectModel):
     table_name: ClassVar[str] = "source_insight"
+    nullable_fields: ClassVar[set[str]] = {"user_id"}
     insight_type: str
     content: str
+    user_id: Optional[str] = None
 
     async def get_source(self) -> "Source":
         try:
@@ -289,10 +293,12 @@ class Source(ObjectModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     table_name: ClassVar[str] = "source"
+    nullable_fields: ClassVar[set[str]] = {"user_id"}
     asset: Optional[Asset] = None
     title: Optional[str] = None
     topics: Optional[List[str]] = Field(default_factory=list)
     full_text: Optional[str] = None
+    user_id: Optional[str] = None
     command: Optional[Union[str, RecordID]] = Field(
         default=None, description="Link to surreal-commands processing job"
     )

@@ -1,7 +1,7 @@
 import os
 from typing import Optional
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
@@ -106,3 +106,11 @@ def check_api_password(
         )
 
     return True
+
+
+def get_user_id(x_user_id: Optional[str] = Header(None)) -> Optional[str]:
+    """
+    Extract user ID from the X-User-Id header.
+    Returns None if no header is present (backward compatible with anonymous usage).
+    """
+    return x_user_id

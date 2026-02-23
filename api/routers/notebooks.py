@@ -1,8 +1,9 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
 
+from api.auth import get_user_id
 from api.models import (
     NotebookCreate,
     NotebookDeletePreview,
@@ -21,19 +22,30 @@ router = APIRouter()
 async def get_notebooks(
     archived: Optional[bool] = Query(None, description="Filter by archived status"),
     order_by: str = Query("updated desc", description="Order by field and direction"),
+    user_id: Optional[str] = Depends(get_user_id),
 ):
     """Get all notebooks with optional filtering and ordering."""
     try:
-        # Build the query with counts
-        query = f"""
-            SELECT *,
-            count(<-reference.in) as source_count,
-            count(<-artifact.in) as note_count
-            FROM notebook
-            ORDER BY {order_by}
-        """
-
-        result = await repo_query(query)
+        # Build the query with counts, filtered by user_id
+        if user_id:
+            query = f"""
+                SELECT *,
+                count(<-reference.in) as source_count,
+                count(<-artifact.in) as note_count
+                FROM notebook
+                WHERE user_id = $user_id
+                ORDER BY {order_by}
+            """
+            result = await repo_query(query, {"user_id": user_id})
+        else:
+            query = f"""
+                SELECT *,
+                count(<-reference.in) as source_count,
+                count(<-artifact.in) as note_count
+                FROM notebook
+                ORDER BY {order_by}
+            """
+            result = await repo_query(query)
 
         # Filter by archived status if specified
         if archived is not None:
@@ -60,12 +72,16 @@ async def get_notebooks(
 
 
 @router.post("/notebooks", response_model=NotebookResponse)
-async def create_notebook(notebook: NotebookCreate):
+async def create_notebook(
+    notebook: NotebookCreate,
+    user_id: Optional[str] = Depends(get_user_id),
+):
     """Create a new notebook."""
     try:
         new_notebook = Notebook(
             name=notebook.name,
             description=notebook.description,
+            user_id=user_id,
         )
         await new_notebook.save()
 
@@ -91,7 +107,10 @@ async def create_notebook(notebook: NotebookCreate):
 @router.get(
     "/notebooks/{notebook_id}/delete-preview", response_model=NotebookDeletePreview
 )
-async def get_notebook_delete_preview(notebook_id: str):
+async def get_notebook_delete_preview(
+    notebook_id: str,
+    user_id: Optional[str] = Depends(get_user_id),
+):
     """Get a preview of what will be deleted when this notebook is deleted."""
     try:
         notebook = await Notebook.get(notebook_id)
@@ -118,7 +137,10 @@ async def get_notebook_delete_preview(notebook_id: str):
 
 
 @router.get("/notebooks/{notebook_id}", response_model=NotebookResponse)
-async def get_notebook(notebook_id: str):
+async def get_notebook(
+    notebook_id: str,
+    user_id: Optional[str] = Depends(get_user_id),
+):
     """Get a specific notebook by ID."""
     try:
         # Query with counts for single notebook
@@ -154,12 +176,18 @@ async def get_notebook(notebook_id: str):
 
 
 @router.put("/notebooks/{notebook_id}", response_model=NotebookResponse)
-async def update_notebook(notebook_id: str, notebook_update: NotebookUpdate):
+async def update_notebook(
+    notebook_id: str,
+    notebook_update: NotebookUpdate,
+    user_id: Optional[str] = Depends(get_user_id),
+):
     """Update a notebook."""
     try:
         notebook = await Notebook.get(notebook_id)
         if not notebook:
             raise HTTPException(status_code=404, detail="Notebook not found")
+        if user_id and notebook.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized to update this notebook")
 
         # Update only provided fields
         if notebook_update.name is not None:
@@ -297,6 +325,7 @@ async def delete_notebook(
         False,
         description="Whether to delete sources that belong only to this notebook",
     ),
+    user_id: Optional[str] = Depends(get_user_id),
 ):
     """
     Delete a notebook with cascade deletion.
@@ -309,6 +338,8 @@ async def delete_notebook(
         notebook = await Notebook.get(notebook_id)
         if not notebook:
             raise HTTPException(status_code=404, detail="Notebook not found")
+        if user_id and notebook.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this notebook")
 
         result = await notebook.delete(delete_exclusive_sources=delete_exclusive_sources)
 
