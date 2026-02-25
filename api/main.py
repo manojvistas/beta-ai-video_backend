@@ -32,7 +32,7 @@ from api.routers import (
     speaker_profiles,
     transformations,
 )
-from api.routers import commands as commands_router
+from api.routers import auth_proxy, commands as commands_router
 from open_notebook.database.async_migrate import AsyncMigrationManager
 
 # Import commands to register them in the API process
@@ -100,6 +100,7 @@ app.add_middleware(
         "/redoc",
         "/api/auth/status",
         "/api/config",
+        "/auth",
     ],
 )
 
@@ -162,6 +163,9 @@ app.include_router(episode_profiles.router, prefix="/api", tags=["episode-profil
 app.include_router(speaker_profiles.router, prefix="/api", tags=["speaker-profiles"])
 app.include_router(chat.router, prefix="/api", tags=["chat"])
 app.include_router(source_chat.router, prefix="/api", tags=["source-chat"])
+
+# Reverse proxy: forward /auth/* to internal auth-api on port 4000
+app.include_router(auth_proxy.router, prefix="/auth", tags=["auth-proxy"])
 
 
 @app.get("/")
