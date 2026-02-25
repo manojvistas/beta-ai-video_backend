@@ -20,6 +20,7 @@ ENV/
 env/
 .env
 .env.*
+!auth-api/.env
 
 # Testing
 .pytest_cache/
@@ -66,8 +67,13 @@ sqlite-db/
 
 # Node (should not be here anyway)
 node_modules/
-package.json
-package-lock.json
+
+# Whitelist auth-api (bundled into backend container)
+!auth-api/
+!auth-api/package.json
+!auth-api/package-lock.json
+!auth-api/src/
+!auth-api/.env
 
 # Misc
 *.bak
