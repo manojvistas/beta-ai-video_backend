@@ -4,24 +4,29 @@
 .github
 
 # Python cache
-__pycache__
+__pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+*.pyc
+*.pyo
+*.pyd
 
 # Virtual environments
-.venv
+.venv/
 venv/
 ENV/
 env/
 .env
+.env.*
 
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
 *.cover
+tests/
 
 # IDE
 .vscode/
@@ -34,6 +39,7 @@ htmlcov/
 docs/
 *.md
 README*
+LICENSE
 
 # CI/CD
 .github/
@@ -55,8 +61,16 @@ data/
 notebook_data/
 surreal_data/
 tiktoken-cache/
+uploads/
+sqlite-db/
 
 # Node (should not be here anyway)
 node_modules/
 package.json
 package-lock.json
+
+# Misc
+*.bak
+*.tmp
+.cache/
+mypy.ini
