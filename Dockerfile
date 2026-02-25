@@ -18,7 +18,7 @@ ENV UV_LINK_MODE=copy
 WORKDIR /app
 
 # Install deps
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml ./
 COPY open_notebook/__init__.py ./open_notebook/__init__.py
 RUN uv sync --frozen --no-dev --no-install-project
 
