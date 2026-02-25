@@ -1,0 +1,62 @@
+# Git
+.git
+.gitignore
+.github
+
+# Python cache
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv
+venv/
+ENV/
+env/
+.env
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation
+docs/
+*.md
+README*
+
+# CI/CD
+.github/
+
+# Local dev
+.DS_Store
+*.log
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# uv cache (not needed in image)
+.uv/
+
+# Data directories (runtime volumes)
+data/
+notebook_data/
+surreal_data/
+tiktoken-cache/
+
+# Node (should not be here anyway)
+node_modules/
+package.json
+package-lock.json
