@@ -137,4 +137,3 @@ node_modules/
 supervisord.log
 supervisord.pid
 *.sock
-uv.lock
