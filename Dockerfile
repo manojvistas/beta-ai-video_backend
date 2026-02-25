@@ -14,16 +14,21 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
+ENV PYTHONIOENCODING=utf-8
 
 WORKDIR /app
 
 # Install deps
 COPY pyproject.toml uv.lock ./
 COPY open_notebook/__init__.py ./open_notebook/__init__.py
-RUN uv sync --frozen --no-dev --no-install-project
 
-# Copy source
+# Clear any existing uv cache and sync dependencies
+RUN uv cache clean && uv sync --frozen --no-dev --no-install-project
+
+# Copy source (excluding files via .dockerignore)
 COPY . .
+
+# Final sync with project
 RUN uv sync --frozen --no-dev
 
 # Runtime stage
