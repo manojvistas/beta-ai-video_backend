@@ -9,10 +9,9 @@
 //   })
 // })
 const { app } = require('./app')
-const { env } = require('./config/env')
 const { verifyTransporter } = require('./services/mailService')
 
-const PORT = process.env.PORT || env.PORT || 8080
+const PORT = 4000
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Auth API listening on :${PORT}`)
