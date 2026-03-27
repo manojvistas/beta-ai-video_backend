@@ -15,8 +15,16 @@ app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }))
 app.use(express.json({ limit: '1mb' }))
 app.use(cookieParser())
 
+function isHealthRequest(req) {
+  return req.path === '/health' || req.path === '/api/auth/health'
+}
+
 // Ensure SurrealDB connection is alive before each request
 app.use(async (req, res, next) => {
+  if (isHealthRequest(req)) {
+    return next()
+  }
+
   try {
     await ensureConnection()
     next()

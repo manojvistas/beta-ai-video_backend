@@ -26,6 +26,11 @@ def get_database_password():
     return os.getenv("SURREAL_PASSWORD") or os.getenv("SURREAL_PASS")
 
 
+def get_database_token():
+    """Get token for cloud authentication if configured"""
+    return os.getenv("SURREAL_TOKEN")
+
+
 def parse_record_ids(obj: Any) -> Any:
     """Recursively parse and convert RecordIDs into strings."""
     if isinstance(obj, dict):
@@ -47,12 +52,16 @@ def ensure_record_id(value: Union[str, RecordID]) -> RecordID:
 @asynccontextmanager
 async def db_connection():
     db = AsyncSurreal(get_database_url())
-    await db.signin(
-        {
-            "username": os.environ.get("SURREAL_USER"),
-            "password": get_database_password(),
-        }
-    )
+    token = get_database_token()
+    if token:
+        await db.signin({"token": token})
+    else:
+        await db.signin(
+            {
+                "username": os.environ.get("SURREAL_USER"),
+                "password": get_database_password(),
+            }
+        )
     await db.use(
         os.environ.get("SURREAL_NAMESPACE"), os.environ.get("SURREAL_DATABASE")
     )

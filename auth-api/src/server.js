@@ -8,3 +8,4 @@ app.listen(env.PORT, () => {
     console.warn('SMTP failed:', error?.message || error)
   })
 })
+

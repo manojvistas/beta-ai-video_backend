@@ -11,12 +11,30 @@ if (!global.WebSocket) {
 const surreal = new Surreal()
 let connected = false
 let connecting = false
+const DB_OP_TIMEOUT_MS = Number(process.env.SURREAL_OP_TIMEOUT_MS || 4000)
+
+function withTimeout(promise, timeoutMs, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs)
+    }),
+  ])
+}
 
 async function connectAndSignin() {
   try { await surreal.close() } catch {}
-  await surreal.connect(env.SURREAL_URL)
-  await surreal.signin({ username: env.SURREAL_USER, password: env.SURREAL_PASS })
-  await surreal.use({ namespace: env.SURREAL_NAMESPACE, database: env.SURREAL_DATABASE })
+  await withTimeout(surreal.connect(env.SURREAL_URL), DB_OP_TIMEOUT_MS, 'Surreal connect')
+  await withTimeout(
+    surreal.signin({ username: env.SURREAL_USER, password: env.SURREAL_PASS }),
+    DB_OP_TIMEOUT_MS,
+    'Surreal signin'
+  )
+  await withTimeout(
+    surreal.use({ namespace: env.SURREAL_NAMESPACE, database: env.SURREAL_DATABASE }),
+    DB_OP_TIMEOUT_MS,
+    'Surreal use namespace/database'
+  )
   connected = true
 }
 
@@ -38,7 +56,7 @@ async function initSurreal() {
 async function ensureConnection() {
   if (connected) {
     try {
-      await surreal.query('SELECT 1')
+      await withTimeout(surreal.query('SELECT 1'), DB_OP_TIMEOUT_MS, 'Surreal health query')
       return
     } catch {
       console.warn('SurrealDB connection lost, reconnecting...')

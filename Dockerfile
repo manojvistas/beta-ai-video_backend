@@ -14,26 +14,33 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
+ENV PYTHONIOENCODING=utf-8
 
 WORKDIR /app
 
 # Install deps
 COPY pyproject.toml uv.lock ./
 COPY open_notebook/__init__.py ./open_notebook/__init__.py
-RUN uv sync --frozen --no-dev --no-install-project
 
-# Copy source
-COPY . /app
+# Clear any existing uv cache and sync dependencies
+RUN uv cache clean && uv sync --frozen --no-dev --no-install-project
+
+# Copy source (excluding files via .dockerignore)
+COPY . .
+
+# Final sync with project
 RUN uv sync --frozen --no-dev
 
 # Runtime stage
 FROM python:3.12-slim-bookworm AS runtime
 
-# Runtime deps (ffmpeg, supervisor)
+# Runtime deps (ffmpeg, supervisor, Node.js for auth-api)
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     ffmpeg \
     supervisor \
     curl \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
@@ -44,11 +51,16 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY . /app
 
+# Install auth-api dependencies
+WORKDIR /app/auth-api
+RUN npm install --production --omit=dev
+WORKDIR /app
+
 ENV UV_NO_SYNC=1
 ENV VIRTUAL_ENV=/app/.venv
 
-# Expose API port
-EXPOSE 15055
+# Expose API port and auth-api port
+EXPOSE 15055 4000
 
 RUN mkdir -p /app/data
 RUN mkdir -p /var/log/supervisor
